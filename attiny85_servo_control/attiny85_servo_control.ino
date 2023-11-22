@@ -49,8 +49,8 @@
 #define FALSE 0
 
 // Butterfly wing flapper parameters
-#define IDLE_WING_ANGLE 5  // when the butterfly is sitting idle without wing flapping
-#define MAX_WING_ANGLE_DEG 90  // maximum wing span
+#define IDLE_WING_ANGLE 90  // when the butterfly is sitting idle without wing flapping
+#define MAX_WING_ANGLE_DEG 50  // maximum wing span
 #define MIN_WING_ANGLE_DEG 20  // minimum wing span
 #define MAX_DELAY_BETWEEN_WING_RESTORE_MSEC  400  // maximum wait time after opening the wings
 #define MIN_DELAY_BETWEEN_WING_RESTORE_MSEC  75  // minimum wait time after opening the wings
