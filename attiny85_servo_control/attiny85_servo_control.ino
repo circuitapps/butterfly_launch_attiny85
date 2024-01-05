@@ -37,7 +37,8 @@
 #define RELEASE_PIN PB3_PIN2  // Incoming signal for releasing the butterfly latch
 #define LOCK_PIN PB4_PIN3  // Incoming signal for locking the butterfly latch
 #define LATCH_SERVO_OUT PB1_PIN6  // This is the signal going to release latch servo motor
-#define FLAP_SERVO_OUT PB0_PIN5  // This is the signal going to release latch servo motor
+#define FLAP_SERVO_OUT PB0_PIN5  // This is the signal going to flap servo motor
+#define FLAP_ONOFF_IN PB2_PIN7  // Incoming signal that enables/disables the butterflies flapping (i.e. enable/disable FLAP_SERVO_OUT)
 //#define TEST_LED PB0_PIN5  // Used for visual testing with LED (for debug purposes only)
 
 #define PC_INT_VECTOR PCINT0_vect  // On ATtiny85, there is ONE interrupt vector (i.e., one interrupt service routine) that gets called when ANY of the active interrupt pins are triggered !
@@ -47,6 +48,9 @@
 
 #define TRUE 1
 #define FALSE 0
+
+#define FLAP_ON 1
+#define FLAP_OFF 0
 
 // Butterfly wing flapper parameters
 #define IDLE_WING_ANGLE 90  // when the butterfly is sitting idle without wing flapping
@@ -65,17 +69,20 @@ Servo8Bit flap_servo_obj;  // create a global wing flap servo object.
 bool next_latch_position;  // Controls how the servo will move next.
 bool current_latch_position;  // Keeps track of the existing latch position.
 bool run_servo;  // Flag set by ISR and reset in main loop as par5t of servo control.
+bool flap_state;  // 
 
 void pin_interrupt_config()
 {
   cli();  // disable GLOBAL interrupts during set up (USE WITH CAUTION as timing functions such as millis(), micros(), delay() get disrupted)
   // Three pin interrupts are enabled below
-  PCMSK |= (1 << RELEASE_PIN) | (1 << LOCK_PIN);  // RELEASE_PIN input and LOCK_PIN pins drive an interrupt
+  PCMSK |= (1 << RELEASE_PIN) | (1 << LOCK_PIN) | (1 << FLAP_ONOFF_IN);  // RELEASE_PIN input, LOCK_PIN and FLAP_ONOFF_IN pins drive an interrupt
   GIFR  |= (1 << PCIF);  // clear any outstanding interrupts
   GIMSK &= ~(1 << PCIE);  // Pin Change Interrupts are DISABLED
   //pinMode(TEST_LED, OUTPUT); // LED pin is set as output
-  pinMode(RELEASE_PIN, INPUT);  // Hourglass clock output accepted as input
-  pinMode(LOCK_PIN, INPUT);  // Hourglass D10 signal accepted as input
+  pinMode(RELEASE_PIN, INPUT);  // Release on launcy servo accepted as input
+  pinMode(LOCK_PIN, INPUT);  // Lock on launcy servo accepted as input
+  pinMode(FLAP_ONOFF_IN, INPUT);  // Wing flap enable/disable accepted as input
+
   sei();  // enable GLOBAL interrupts after set up (last line of set up) (USE WITH CAUTION as timing functions such as millis(), micros(), delay() get enabled)
 }
 
@@ -122,18 +129,28 @@ void flap_wings(void)
 ISR(PC_INT_VECTOR)
 {// Pin change interrupt routine
 
-  if( digitalRead(LOCK_PIN) == HIGH)
-  { // Butterfly latch needs to move to release position
+  if( digitalRead(LOCK_PIN) == HIGH )
+  { // LOCK_PIN triggered the pin change interrupt. Butterfly latch needs to move to release position
       run_servo = TRUE;  // signal to main loop to enable servo rotation
       next_latch_position = LOCK_POSITION;  // servo needs to move to lock position
       //digitalWrite(TEST_LED, HIGH);  // for troubleshooting if necessary
   }
 
-  if( digitalRead(RELEASE_PIN) == HIGH)
-  { // Butterfly latch needs to move to release position
+  if( digitalRead(RELEASE_PIN) == HIGH )
+  { // RELEASE_PIN triggered the pin change interrupt. Butterfly latch needs to move to release position
       run_servo = TRUE;  // signal to main loop to enable servo rotation
       //digitalWrite(TEST_LED, LOW);  // for troubleshooting if necessary
       next_latch_position = RELEASE_POSITION;  // servo needs to move to release position
+  }
+
+  if( digitalRead(FLAP_ONOFF_IN) == HIGH )
+  {// Flap enable/disable input triggered the pin change interrupt.
+    // Simple flap toggle implementation follows
+    if( flap_state == FLAP_ON )
+      flap_state = FLAP_OFF;
+    else
+      flap_state = FLAP_ON;
+
   }
 
 }
@@ -145,6 +162,7 @@ void setup()
   next_latch_position = LOCK_POSITION;  // Controls how the servo will move next.
   current_latch_position = RELEASE_POSITION;  // Needs to be different to next_latch_position
   run_servo = FALSE;  // Main loop will not activate the servo at startup.
+  flap_state = FLAP_OFF;    // At start up, butterfly will NOT flap wings.
 
   flap_servo_obj.attach(FLAP_SERVO_OUT);    //attach the wing flap servo to pin PB0 (pin 5)
 
@@ -172,9 +190,14 @@ void loop()
   }
   else
   {// Flap butterfly wings using another servo
-    flap_wings();
-    unsigned long flap_delay = (unsigned long)random(MIN_DELAY_BETWEEN_FLAPS_MSEC, MAX_DELAY_BETWEEN_FLAPS_MSEC);
-    delay(flap_delay);  // wait before next flap event
+
+    if(flap_state == FLAP_ON)
+    {
+      flap_wings();
+      unsigned long flap_delay = (unsigned long)random(MIN_DELAY_BETWEEN_FLAPS_MSEC, MAX_DELAY_BETWEEN_FLAPS_MSEC);
+      delay(flap_delay);  // wait before next flap event
+    }
+
   }
 
 }
